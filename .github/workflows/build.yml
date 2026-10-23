@@ -15,7 +15,8 @@ jobs:
         with:
           gradle-version: 9.2.1
       - run: gradle build
+        working-directory: BoxTwitch
       - uses: actions/upload-artifact@v4
         with:
           name: BoxTwitch-jar
-          path: build/libs/BoxTwitch-fabric-1.21.11.jar
+          path: BoxTwitch/build/libs/BoxTwitch-fabric-1.21.11.jar
