@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><title>BoxTwitch overlay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bed:#1b1d21;--slab:#2c2f36;--amber:#f2b01e;--tnt:#e0322b;--good:#5be3a1;--txt:#f3efe6}
+*{box-sizing:border-box;margin:0}
+html,body{width:1920px;height:1080px;background:transparent;overflow:hidden;font-family:"Chakra Petch","Segoe UI",Arial,sans-serif;color:var(--txt)}
+#bar{position:absolute;left:360px;top:28px;width:1200px}
+#track{height:54px;background:var(--bed);border:3px solid #000;display:grid;grid-template-columns:repeat(50,1fr);gap:2px;padding:4px}
+#track i{background:#3a3e47;display:block}
+#track i.on{background:var(--amber)}
+#info{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;background:var(--bed);padding:6px 14px;border:3px solid #000}
+#pct{font-size:44px;font-weight:700;color:var(--amber)}
+#rest{font-size:24px}
+#last{font-size:20px;opacity:.8}
+.col{position:absolute;top:200px;width:430px;display:flex;flex-direction:column;gap:8px}
+#left{left:30px}#right{right:30px}
+.col h2{font-size:22px;background:var(--bed);padding:6px 12px;border-left:6px solid var(--amber)}
+.row{background:var(--slab);padding:8px 12px;font-size:21px;border-left:6px solid #777;animation:in .35s ease-out}
+.row.good{border-color:var(--good)}.row.tnt{border-color:var(--tnt)}.row.systeme{border-color:var(--amber)}
+.row b{color:var(--amber)}
+@keyframes in{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+#flash{position:absolute;inset:0;background:var(--tnt);opacity:0;pointer-events:none}
+#flash.go{animation:fl .9s ease-out}
+@keyframes fl{0%{opacity:.55}100%{opacity:0}}
+#tntbanner{position:absolute;left:0;right:0;top:420px;text-align:center;font-size:96px;font-weight:700;color:#fff;text-shadow:0 0 0 #000,6px 6px 0 var(--tnt);opacity:0}
+#tntbanner.go{animation:bn 2.2s ease-out}
+@keyframes bn{0%{opacity:0;transform:scale(.4)}12%{opacity:1;transform:scale(1.08)}80%{opacity:1;transform:scale(1)}100%{opacity:0}}
+body.shake{animation:sh .6s}
+@keyframes sh{0%,100%{transform:none}20%{transform:translate(-14px,8px)}40%{transform:translate(12px,-10px)}60%{transform:translate(-10px,-6px)}80%{transform:translate(8px,10px)}}
+#win{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(27,29,33,.82)}
+#win.on{display:flex}
+#win h1{font-size:200px;color:var(--amber);letter-spacing:6px}
+#win p{font-size:44px;margin-top:10px}
+#off{position:absolute;bottom:20px;left:30px;font-size:20px;background:var(--bed);padding:6px 12px;display:none;border-left:6px solid var(--tnt)}
+@media (prefers-reduced-motion:reduce){.row,#flash.go,#tntbanner.go,body.shake{animation:none}}
+</style></head>
+<body>
+<div id="bar"><div id="track"></div>
+ <div id="info"><span id="pct">0 %</span><span id="rest">—</span><span id="last"></span></div></div>
+<div class="col" id="left"><h2>Commandes du chat</h2><div id="chat"></div><h2>Top viewers</h2><div id="top"></div></div>
+<div class="col" id="right"><h2>Bonus et sabotages</h2><div id="ev"></div></div>
+<div id="flash"></div><div id="tntbanner"></div>
+<div id="win"><h1>VICTOIRE</h1><p>La box est remplie à 100 % grâce au chat !</p></div>
+<div id="off"></div>
+<script>
+const token=new URLSearchParams(location.search).get('token')||'';
+const track=document.getElementById('track');
+for(let i=0;i<50;i++)track.appendChild(document.createElement('i'));
+const cells=[...track.children];
+let seen=new Set(),first=true;
+const $=id=>document.getElementById(id);
+function row(e,withUser){const d=document.createElement('div');d.className='row '+e.type;
+ const b=document.createElement('b');b.textContent=e.user;d.append(b,' ',e.text);return d}
+function fill(id,list){const el=$(id);el.replaceChildren(...list.slice(0,8).map(row))}
+function boom(e){$('tntbanner').textContent='TNT de '+e.user+' !';
+ for(const [id,c] of [['flash','go'],['tntbanner','go']]){const n=$(id);n.classList.remove(c);void n.offsetWidth;n.classList.add(c)}
+ document.body.classList.remove('shake');void document.body.offsetWidth;document.body.classList.add('shake')}
+async function tick(){
+ try{
+  const r=await fetch('/state?token='+encodeURIComponent(token),{cache:'no-store'});
+  if(!r.ok)throw new Error(r.status);
+  const s=await r.json();$('off').style.display='none';
+  const on=Math.round(s.percent/2);cells.forEach((c,i)=>c.classList.toggle('on',i<on));
+  $('pct').textContent=s.percent.toFixed(1)+' %';
+  $('rest').textContent='Reste '+s.remaining.toLocaleString('fr-FR')+' blocs';
+  $('last').textContent=s.lastUser?'Dernier : '+s.lastUser:'';
+  fill('chat',s.chat);fill('ev',s.events);
+  const top=$('top');top.replaceChildren(...s.top.slice(0,5).map(t=>{const d=document.createElement('div');d.className='row';
+   const b=document.createElement('b');b.textContent=t.name;d.append(b,' — '+t.score+' blocs');return d}));
+  for(const e of s.events){if(!seen.has(e.id)){seen.add(e.id);if(!first&&e.type==='tnt')boom(e)}}
+  first=false;
+  $('win').classList.toggle('on',s.status==='WON');
+ }catch(err){const o=$('off');o.textContent='Overlay déconnecté du mod (Minecraft lancé ? jeton correct ?)';o.style.display='block'}
+}
+setInterval(tick,600);tick();
+</script></body></html>
